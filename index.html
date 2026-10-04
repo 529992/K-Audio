@@ -104,10 +104,14 @@
     .catalogue-note { margin: 24px 0 0; color: var(--muted); text-align: center; font-size: 12px; }
 
     .about-section { padding: 72px 24px; color: white; background: var(--deep-purple); }
-    .about-inner { width: min(1120px, 100%); margin: auto; display: grid; grid-template-columns: 1fr .85fr; align-items: center; gap: 72px; }
+    .about-inner { width: min(1120px, 100%); margin: auto; }
+    .about-profile { display: grid; grid-template-columns: .9fr 1fr; align-items: center; gap: 54px; margin-bottom: 48px; }
+    .founder-photo { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; object-position: 24% center; }
     .about-copy .eyebrow { color: var(--lime); }
     .about-copy h2 { max-width: 560px; margin-bottom: 18px; font-size: 38px; }
     .about-copy > p:last-child { max-width: 540px; margin-bottom: 0; color: #d5cadf; font-size: 14px; line-height: 1.8; }
+    .founder-label { margin: 0 0 11px; color: var(--lime); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+    .about-points-heading { margin: 0 0 16px; color: white; font-family: var(--font-display); font-size: 17px; }
     .about-points { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #ffffff35; }
     .about-point { min-height: 105px; padding: 19px 16px 17px 0; border-bottom: 1px solid #ffffff35; }
     .about-point:nth-child(odd) { border-right: 1px solid #ffffff35; }
@@ -194,7 +198,8 @@
       .product-info h3 { min-height: 52px; }
       .product-details { min-height: 96px; }
       .about-section { padding: 50px 16px; }
-      .about-inner { grid-template-columns: 1fr; gap: 28px; }
+      .about-profile { grid-template-columns: 1fr; gap: 25px; margin-bottom: 34px; }
+      .founder-photo { aspect-ratio: 4 / 3; object-position: 24% 42%; }
       .about-copy h2 { font-size: 30px; }
       .about-point { min-height: 95px; }
       .service-inner { width: calc(100% - 32px); align-items: flex-start; flex-direction: column; justify-content: center; gap: 18px; padding: 27px 0; }
@@ -284,11 +289,16 @@
 
     <section class="about-section" id="about" aria-labelledby="about-title">
       <div class="about-inner">
-        <div class="about-copy">
-          <p class="eyebrow">About K Audio</p>
-          <h2 id="about-title">Focused on the gear that drives your sound.</h2>
-          <p>K Audio brings professional power amplifiers and audio equipment repair together in one place. Browse the catalogue to explore the range, then contact us for model details, availability, or help with a repair.</p>
+        <div class="about-profile">
+          <img class="founder-photo" src="assets/Founder.jpg" alt="K Audio founder in a professional audio mixing studio">
+          <div class="about-copy">
+            <p class="eyebrow">About K Audio</p>
+            <h2 id="about-title">Focused on the gear that drives your sound.</h2>
+            <p class="founder-label">Meet the founder</p>
+            <p>Sample founder bio: K Audio was founded by an audio enthusiast who believes dependable equipment and thoughtful service make every production better. With a hands-on interest in live sound and audio technology, the founder is focused on helping musicians, venues, and audio professionals find and maintain gear they can rely on.</p>
+          </div>
         </div>
+        <h3 class="about-points-heading">What we focus on</h3>
         <div class="about-points" aria-label="K Audio areas of focus">
           <div class="about-point"><strong>Amplifier catalogue</strong><span>Browse professional power amplifier models.</span></div>
           <div class="about-point"><strong>Product guidance</strong><span>Ask our team about specifications and suitable applications.</span></div>
