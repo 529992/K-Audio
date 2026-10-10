@@ -371,12 +371,12 @@
 
     function imageUrl(value) {
       try {
-        const url = new URL(value);
+        const url = new URL(value, location.href);
         if (url.hostname === 'drive.google.com') {
           const fileId = url.pathname.match(/\/file\/d\/([\w-]+)/)?.[1] || url.searchParams.get('id');
           if (fileId) return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(fileId)}`;
         }
-        return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+        return ['file:', 'http:', 'https:'].includes(url.protocol) ? url.href : '';
       } catch {
         return '';
       }

@@ -135,6 +135,10 @@
       <a class="brand" href="index.html" aria-label="K Audio home"><img src="assets/logo.jpg" alt=""><span>Product Manager</span></a>
       <div class="topbar-actions">
         <span class="save-state" id="save-state" aria-live="polite">Saved in this browser</span>
+        <button class="button secondary" id="choose-assets-folder" type="button" title="Choose the project assets folder for uploaded product images">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"></path><path d="M12 11v6m-2-2 2 2 2-2"></path></svg>
+          <span id="assets-button-label">Select assets folder</span>
+        </button>
         <button class="button secondary" id="open-data-file" type="button" title="Choose a text file for automatic saving">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H12l2 2h3.5A2.5 2.5 0 0 1 20 9.5v7a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z"></path><path d="M12 10v6m-2-2 2 2 2-2"></path></svg>
           <span id="file-button-label">Choose data file</span>
@@ -150,6 +154,7 @@
 
     <section class="editor" aria-labelledby="form-title">
       <div class="editor-header"><h2 id="form-title">Add a product</h2><span>Fields marked optional can be left blank.</span></div>
+        <div class="editor-header"><h2 id="form-title">Add a product</h2><span>Select the assets folder before saving changes.</span></div>
       <form id="product-form">
         <input type="hidden" id="product-id">
         <div class="form-grid">
@@ -158,7 +163,7 @@
           <div class="field"><label for="price">Price *</label><input id="price" name="price" required maxlength="40" placeholder="Contact for price"></div>
           <div class="field"><label for="status">Availability</label><select id="status" name="status"><option value="In stock">In stock</option><option value="Enquire">Enquire</option><option value="Out of stock">Out of stock</option></select></div>
           <div class="field full"><label for="description">Description <span class="optional">optional</span></label><textarea id="description" name="description" maxlength="500" placeholder="Key features, condition, specifications..."></textarea></div>
-          <div class="field full"><label for="image-links">Google Drive image links <span class="optional">optional, one link per line</span></label><textarea id="image-links" name="imageLinks" placeholder="https://drive.google.com/file/d/FILE_ID/view?usp=sharing&#10;https://drive.google.com/open?id=ANOTHER_FILE_ID"></textarea><p class="hint">Set each Drive image to “Anyone with the link” can view. Add one link per line; the first image is used on the product card.</p><div class="image-preview" id="image-preview" aria-label="Image link previews"></div></div>
+          <div class="field full"><label for="product-images">Product images <span class="optional">optional, select multiple</span></label><input id="product-images" name="images" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" multiple><p class="hint" id="image-hint">Choose product photos. Select the project’s assets folder above before saving images. Existing photos stay in place when editing unless you choose replacements.</p><div class="image-preview" id="image-preview" aria-label="Image previews"></div></div>
         </div>
         <div class="form-actions"><button class="button" id="submit-button" type="submit">Add product</button><button class="button outline" id="cancel-edit" type="button" hidden>Cancel edit</button></div>
       </form>
@@ -179,12 +184,15 @@
       const form = document.querySelector("#product-form");
       const list = document.querySelector("#product-list");
       const preview = document.querySelector("#image-preview");
+      const imageInput = document.querySelector("#product-images");
       const saveState = document.querySelector("#save-state");
       const fileButtonLabel = document.querySelector("#file-button-label");
+      const assetsButtonLabel = document.querySelector("#assets-button-label");
       const toast = document.querySelector("#toast");
       const deleteDialog = document.querySelector("#delete-dialog");
       let products = loadProducts();
       let fileHandle = null;
+      let assetsDirectoryHandle = null;
       let deleteTarget = null;
       let toastTimer;
 
@@ -197,15 +205,44 @@
         }
       }
 
-      function driveImageUrl(value) {
-        const trimmed = value.trim();
+      function imageUrl(value) {
+        const trimmed = String(value || "").trim();
         const match = trimmed.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:[^#]*&)?id=)([\w-]+)/i);
         if (match) return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(match[1])}`;
         return trimmed;
       }
 
-      function parseImageLinks(value) {
-        return [...new Set(value.split(/[\n,]+/).map((url) => url.trim()).filter(Boolean))];
+      function safeFileName(value) {
+        return value.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(-100) || "product-image";
+      }
+
+      async function saveUploadedImages(files, productId) {
+        if (!files.length) return [];
+        if (!assetsDirectoryHandle) throw new Error("Select the project assets folder before saving product images.");
+        const savedPaths = [];
+        for (const [index, file] of files.entries()) {
+          if (!file.type.startsWith("image/")) throw new Error(`${file.name} is not an image file.`);
+          const filename = `${productId}-${Date.now()}-${index + 1}-${safeFileName(file.name)}`;
+          const handle = await assetsDirectoryHandle.getFileHandle(filename, { create: true });
+          const writable = await handle.createWritable();
+          await writable.write(file);
+          await writable.close();
+          savedPaths.push(`assets/${filename}`);
+        }
+        return savedPaths;
+      }
+
+      async function removeManagedImages(product) {
+        if (!assetsDirectoryHandle || !Array.isArray(product?.assetFiles)) return;
+        for (const path of product.assetFiles) {
+          const filename = String(path).replace(/^assets\//, "");
+          if (!filename || filename.includes("/") || filename.includes("\\")) continue;
+          try {
+            await assetsDirectoryHandle.removeEntry(filename);
+          } catch (error) {
+            if (error.name !== "NotFoundError") throw error;
+          }
+        }
       }
 
       function escapeHtml(value) {
@@ -227,6 +264,25 @@
       async function saveProducts() {
         const text = `${JSON.stringify(products, null, 2)}\n`;
         localStorage.setItem(STORAGE_KEY, text);
+        if (assetsDirectoryHandle) {
+          try {
+            const permission = await assetsDirectoryHandle.queryPermission({ mode: "readwrite" });
+            if (permission !== "granted") {
+              const requested = await assetsDirectoryHandle.requestPermission({ mode: "readwrite" });
+              if (requested !== "granted") throw new Error("Write permission was not granted.");
+            }
+            const dataFile = await assetsDirectoryHandle.getFileHandle("data.txt", { create: true });
+            const writable = await dataFile.createWritable();
+            await writable.write(text);
+            await writable.close();
+            setSaveState("Saved to assets/data.txt");
+          } catch (error) {
+            assetsDirectoryHandle = null;
+            assetsButtonLabel.textContent = "Select assets folder";
+            setSaveState("Browser saved; data.txt not updated", true);
+            showToast(error.message || "Could not update assets/data.txt.");
+          }
+        }
         if (fileHandle) {
           try {
             const permission = await fileHandle.queryPermission({ mode: "readwrite" });
@@ -247,7 +303,7 @@
             return;
           }
         }
-        setSaveState("Saved in this browser");
+        if (!assetsDirectoryHandle) setSaveState("Saved in this browser");
       }
 
       function renderProducts() {
@@ -259,23 +315,27 @@
           return;
         }
         list.innerHTML = visible.map((product) => {
-          const image = product.images?.[0] ? driveImageUrl(product.images[0]) : "";
+          const image = product.images?.[0] ? imageUrl(product.images[0]) : "";
           const stockClass = product.status === "Out of stock" ? "stock out" : "stock";
           const imageMarkup = image
-            ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.querySelector('.no-image').hidden=false">`
+            ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(product.name)}" loading="lazy" referrerpolicy="no-referrer">`
             : "";
           return `<article class="product-card" data-id="${escapeHtml(product.id)}"><div class="card-image">${imageMarkup}<div class="no-image" ${image ? "hidden" : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1"></rect><circle cx="8.5" cy="9" r="1.5"></circle><path d="m21 15-5-5L5 20"></path></svg><span>Product image</span></div>${product.images?.length > 1 ? `<span class="image-count">${product.images.length} images</span>` : ""}</div><div class="card-body"><div class="card-topline"><span class="category">${escapeHtml(product.category)}</span><span class="${stockClass}">${escapeHtml(product.status)}</span></div><h3>${escapeHtml(product.name)}</h3><p class="price">${escapeHtml(product.price)}</p><p class="description">${escapeHtml(product.description || "No description added.")}</p><div class="card-actions"><button class="button outline edit-product" type="button">Edit</button><button class="button danger delete-product" type="button">Delete</button></div></div></article>`;
         }).join("");
+        list.querySelectorAll(".card-image img").forEach((image) => image.addEventListener("error", () => {
+          const placeholder = image.parentElement?.querySelector(".no-image");
+          image.remove();
+          if (placeholder) placeholder.hidden = false;
+        }, { once: true }));
       }
 
       function updateImagePreview() {
-        const links = parseImageLinks(document.querySelector("#image-links").value);
-        preview.replaceChildren(...links.slice(0, 8).map((link) => {
+        const files = [...imageInput.files];
+        preview.replaceChildren(...files.slice(0, 8).map((file) => {
           const image = document.createElement("img");
-          image.src = driveImageUrl(link);
-          image.alt = "Product image preview";
-          image.referrerPolicy = "no-referrer";
-          image.onerror = () => { image.title = "Preview unavailable; check the Drive sharing permissions."; image.style.opacity = ".35"; };
+          image.src = URL.createObjectURL(file);
+          image.alt = file.name;
+          image.addEventListener("load", () => URL.revokeObjectURL(image.src), { once: true });
           return image;
         }));
       }
@@ -287,6 +347,7 @@
         document.querySelector("#submit-button").textContent = "Add product";
         document.querySelector("#cancel-edit").hidden = true;
         preview.replaceChildren();
+        document.querySelector("#image-hint").textContent = "Choose product photos. Select the project’s assets folder above before saving images. Existing photos stay in place when editing unless you choose replacements.";
       }
 
       function startEdit(product) {
@@ -296,11 +357,11 @@
         document.querySelector("#price").value = product.price;
         document.querySelector("#status").value = product.status;
         document.querySelector("#description").value = product.description || "";
-        document.querySelector("#image-links").value = (product.images || []).join("\n");
         document.querySelector("#form-title").textContent = "Edit product";
         document.querySelector("#submit-button").textContent = "Save changes";
         document.querySelector("#cancel-edit").hidden = false;
-        updateImagePreview();
+        preview.replaceChildren();
+        document.querySelector("#image-hint").textContent = `${product.images?.length || 0} current image(s). Select replacement images to update them; leave the picker empty to keep the current images.`;
         document.querySelector("#name").focus();
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
@@ -308,18 +369,39 @@
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const id = document.querySelector("#product-id").value;
+        if (!assetsDirectoryHandle) {
+          showToast("Select the assets folder before saving product changes.");
+          return;
+        }
         const existing = products.find((product) => product.id === id);
+        const productId = id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+        let uploadedImages;
+        try {
+          uploadedImages = await saveUploadedImages([...imageInput.files], productId);
+        } catch (error) {
+          showToast(error.message || "Could not save product images.");
+          return;
+        }
         const product = {
-          id: id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+          id: productId,
           name: document.querySelector("#name").value.trim(),
           category: document.querySelector("#category").value.trim(),
           price: document.querySelector("#price").value.trim(),
           status: document.querySelector("#status").value,
           description: document.querySelector("#description").value.trim(),
-          images: parseImageLinks(document.querySelector("#image-links").value),
+          images: uploadedImages.length ? uploadedImages : (existing?.images || []),
+          assetFiles: uploadedImages.length ? uploadedImages : (existing?.assetFiles || []),
           updatedAt: new Date().toISOString(),
           createdAt: existing?.createdAt || new Date().toISOString()
         };
+        if (existing && uploadedImages.length) {
+          try {
+            await removeManagedImages(existing);
+          } catch (error) {
+            showToast(error.message || "Could not remove the previous product images.");
+            return;
+          }
+        }
         if (existing) products = products.map((item) => item.id === id ? product : item);
         else products.unshift(product);
         await saveProducts();
@@ -342,6 +424,17 @@
       });
 
       document.querySelector("#confirm-delete").addEventListener("click", async () => {
+        const productToDelete = products.find((product) => product.id === deleteTarget);
+        if (!assetsDirectoryHandle) {
+          showToast("Select the assets folder before deleting products.");
+          return;
+        }
+        try {
+          await removeManagedImages(productToDelete);
+        } catch (error) {
+          showToast(error.message || "Could not remove the product images.");
+          return;
+        }
         products = products.filter((product) => product.id !== deleteTarget);
         if (document.querySelector("#product-id").value === deleteTarget) resetForm();
         deleteTarget = null;
@@ -354,8 +447,23 @@
       deleteDialog.addEventListener("click", (event) => { if (event.target === deleteDialog) deleteDialog.classList.remove("open"); });
       document.querySelector("#cancel-edit").addEventListener("click", resetForm);
       document.querySelector("#filter").addEventListener("input", renderProducts);
-      document.querySelector("#image-links").addEventListener("input", updateImagePreview);
+      imageInput.addEventListener("change", updateImagePreview);
       document.addEventListener("keydown", (event) => { if (event.key === "Escape") deleteDialog.classList.remove("open"); });
+
+      document.querySelector("#choose-assets-folder").addEventListener("click", async () => {
+        if (!window.showDirectoryPicker) {
+          showToast("This browser cannot write to a selected folder. Open this page in a current Chromium browser.");
+          return;
+        }
+        try {
+          assetsDirectoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+          assetsButtonLabel.textContent = `Assets: ${assetsDirectoryHandle.name}`;
+          await saveProducts();
+          showToast(`Product details will be saved to ${assetsDirectoryHandle.name}/data.txt.`);
+        } catch (error) {
+          if (error.name !== "AbortError") showToast(error.message || "Could not select the assets folder.");
+        }
+      });
 
       document.querySelector("#open-data-file").addEventListener("click", async () => {
         if (window.showSaveFilePicker) {
